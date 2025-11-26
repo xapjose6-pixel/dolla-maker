@@ -1,0 +1,4 @@
+# Replace these with your actual keys
+THEODDS_API_KEY=your_api_key_here
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+ODDS_CSV_PATH=data/odds_snapshot.csv
