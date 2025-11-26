@@ -1,0 +1,68 @@
+import os, time
+from rich.console import Console
+from rich.table import Table
+from best_odds_alerts_enhanced import BestOddsAlertEnhanced
+from best_odds_full import TheOddsAPIAdapter, CSVOddsAdapter, TeamMapper
+import requests
+
+console = Console()
+
+# Load environment variables
+API_KEY = os.getenv("THEODDS_API_KEY")
+SLACK_WEBHOOK = os.getenv("SLACK_WEBHOOK_URL")
+CSV_PATH = os.getenv("ODDS_CSV_PATH")
+
+# Setup adapters and team mapper
+adapters = []
+if API_KEY:
+    adapters.append(TheOddsAPIAdapter(API_KEY))
+if CSV_PATH:
+    adapters.append(CSVOddsAdapter(CSV_PATH))
+
+team_mapper = TeamMapper("team_map.csv")
+alert_system = BestOddsAlertEnhanced(adapters, team_mapper)
+
+# Example upcoming games
+upcoming_games = [
+    {"home_team_id": "Los Angeles Lakers", "away_team_id": "Golden State Warriors", "date": "2025-11-27T02:00:00Z"},
+    {"home_team_id": "Boston Celtics", "away_team_id": "Miami Heat", "date": "2025-11-27T00:30:00Z"},
+]
+
+# Slack notification helper
+def send_slack_notification(message):
+    if SLACK_WEBHOOK:
+        try:
+            requests.post(SLACK_WEBHOOK, json={"text": message})
+        except Exception as e:
+            console.print(f"[red]Slack notification failed:[/red] {e}")
+
+# Arbitrage helper
+def check_multiway_arbitrage(outcomes, bankroll=100):
+    arb_sum = sum(1 / o[2] for o in outcomes)
+    if arb_sum >= 1: return None
+    stakes = [(o[0], round(bankroll / (o[2]*arb_sum),2), o[2]) for o in outcomes]
+    profit = bankroll - sum(s[1] for s in stakes)
+    return {"profit_percent": round(profit/bankroll*100,2), "stakes": stakes}
+
+# Main loop
+while True:
+    table = Table(title="Live Odds Dashboard")
+    table.add_column("Game")
+    table.add_column("Arb Profit / Stakes")
+    for game in upcoming_games:
+        alert = alert_system.check_game(game["home_team_id"], game["away_team_id"], str(game["date"]))
+        arb_info_str = "-"
+        if alert and alert.get("moneyline"):
+            best_home = alert["moneyline"]["best_home"][0]
+            best_away = alert["moneyline"]["best_away"][0]
+            outcomes = [("Home", best_home, alert["moneyline"]["best_home"][1]),
+                        ("Away", best_away, alert["moneyline"]["best_away"][1])]
+            arb = check_multiway_arbitrage(outcomes)
+            if arb:
+                stakes_str = ", ".join([f"{s[0]}:${s[1]}@{s[2]:.2f}" for s in arb["stakes"]])
+                arb_info_str = f"[bold green]{arb['profit_percent']}%[/bold green] | {stakes_str}"
+                send_slack_notification(f"Arbitrage detected! {game['home_team_id']} vs {game['away_team_id']} | Profit: {arb['profit_percent']}% | Stakes: {stakes_str}")
+        table.add_row(f"{game['home_team_id']} vs {game['away_team_id']}", arb_info_str)
+    console.clear()
+    console.print(table)
+    time.sleep(30)
