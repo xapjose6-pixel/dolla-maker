@@ -1,0 +1,16 @@
+# Placeholder alert system
+class TeamMapper:
+    def __init__(self, csv_path):
+        self.csv_path = csv_path
+        # Load mapping if needed
+
+class BestOddsAlertEnhanced:
+    def __init__(self, adapters, team_mapper):
+        self.adapters = adapters
+        self.team_mapper = team_mapper
+
+    def check_game(self, home_team, away_team, date):
+        # Fetch odds from all adapters
+        best_home = (None, 1.90)
+        best_away = (None, 2.00)
+        return {"moneyline": {"best_home": best_home, "best_away": best_away}}
